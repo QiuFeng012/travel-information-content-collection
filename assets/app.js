@@ -26,6 +26,9 @@
 
   var DAY_VAR = { Day1: '--day1', Day2: '--day2', Day3: '--day3', Day4: '--day4' };
 
+  // 星形标记的边长（px）。嫌小/嫌挤就改这里，CSS 会跟着 JS 走。
+  var MK = { day: 36, free: 30, list: 32 };
+
   var BASEMAPS = {
     gaode: {
       url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
@@ -143,6 +146,16 @@
   function fmtPrice(v) {
     v = Number(v) || 0;
     return v > 0 ? '¥' + v : '免费';
+  }
+
+  // 星形标记的唯一出口——地图、列表、图例都走这里，形状不会跑偏
+  function star(tier, size, color, label, extraClass) {
+    var text = String(label == null ? '' : label);
+    var style = 'width:' + size + 'px;height:' + size + 'px' + (color ? ';--c:' + color : '');
+    // 某天超过 9 站时是两位数，得缩一档才塞得进星星肚子
+    var lstyle = text.length > 1 ? ' style="font-size:' + Math.round(size * 0.28) + 'px"' : '';
+    return '<span class="star ' + tier + (extraClass ? ' ' + extraClass : '') + '" style="' + style + '">'
+      + '<i class="star-fill"></i><b class="star-label"' + lstyle + '>' + esc(text) + '</b></span>';
   }
 
   function isGcj() { return BASEMAPS[state.basemap].crs === 'gcj'; }
@@ -303,8 +316,8 @@
 
     var html = '';
     if (state.edit) {
-      html += '<button class="place" id="btnAdd" style="grid-template-columns:26px 1fr">'
-        + '<span class="pin todo" style="border-style:solid">+</span>'
+      html += '<button class="place" id="btnAdd">'
+        + star('t-free', MK.list, null, '+', 'pin')
         + '<span><span class="pname">新增地点</span>'
         + '<div class="pdesc">以当前地图中心为坐标，随后可在地图上点选或拖动校准</div></span>'
         + '</button>';
@@ -316,9 +329,6 @@
 
     list.forEach(function (p) {
       var idx = orderIndex(p);
-      var bg = p.day ? dayColor(p.day) : 'transparent';
-      var pinStyle = p.day ? ' style="background:' + bg + ';color:#fff;border-color:transparent"' : '';
-      var pinCls = 'pin' + (p.day ? ' on' : ' todo');
       var label = idx ? String(idx) : (GLYPH[p.cat] || '·');
       var meta = p.cat + ' · ' + fmtStay(p.stay) + ' · ' + fmtPrice(p.price);
       var tags = (p.tags || []).slice(0, 4).map(function (t) {
@@ -326,7 +336,7 @@
       }).join('');
 
       html += '<button class="place" data-id="' + esc(p.id) + '" aria-current="' + (state.selectedId === p.id) + '">'
-        + '<span class="' + pinCls + '"' + pinStyle + '>' + esc(label) + '</span>'
+        + star(p.day ? 't-day' : 't-free', MK.list, p.day ? dayColor(p.day) : null, label, 'pin')
         + '<span>'
         + '<span class="ptop"><span class="pname">' + esc(p.name)
         + (p.v === 1 ? '' : '<span style="color:var(--muted);font-weight:400"> ≈</span>') + '</span>'
@@ -348,16 +358,17 @@
 
   function iconFor(p) {
     var idx = orderIndex(p);
-    var color = p.day ? dayColor(p.day) : 'transparent';
     var label = idx ? String(idx) : (GLYPH[p.cat] || '·');
-    var cls = 'mk' + (p.day ? '' : ' todo') + (state.selectedId === p.id ? ' sel' : '');
-    var style = p.day ? 'background:' + color : '';
+    var tier = p.day ? 't-day' : 't-free';
+    var size = p.day ? MK.day : MK.free;
+    var cls = 'mk' + (state.selectedId === p.id ? ' sel' : '');
     return L.divIcon({
       className: '',
-      html: '<div class="' + cls + '" style="' + style + '">' + esc(label) + '</div>',
-      iconSize: [26, 26],
-      iconAnchor: [13, 13],
-      popupAnchor: [0, -14]
+      html: star(tier, size, p.day ? dayColor(p.day) : null, label, cls),
+      iconSize: [size, size],
+      // 星形重心比外接框中心略低一点，锚点往下挪一丁点，视觉上才落在坐标上
+      iconAnchor: [size / 2, size * 0.46],
+      popupAnchor: [0, -size * 0.42]
     });
   }
 
@@ -439,7 +450,7 @@
       var ll = toLatLng(p);
       var m = markers[p.id];
       if (!m) {
-        m = L.marker(ll, { icon: iconFor(p), draggable: state.edit });
+        m = L.marker(ll, { icon: iconFor(p), draggable: state.edit, riseOnHover: true });
         m.on('click', function () { select(p.id); });
         m.on('dragend', function () {
           var q = m.getLatLng();
@@ -459,6 +470,8 @@
         m.setPopupContent(popupFor(p));
         if (state.edit) m.dragging.enable(); else m.dragging.disable();
       }
+      // 星比原来大，密集区会叠在一起——选中的那颗必须压在最上面
+      m.setZIndexOffset(state.selectedId === p.id ? 1000 : 0);
     });
 
     // 行程连线
@@ -490,7 +503,7 @@
     var rows = DAYS.map(function (d) {
       var n = list.filter(function (p) { return p.day === d; }).length;
       if (!n) return '';
-      return '<div class="row"><span class="sw" style="background:' + dayColor(d) + '"></span>'
+      return '<div class="row"><span class="sw" style="color:' + dayColor(d) + '"></span>'
         + esc(d) + '<span class="n">' + n + '</span></div>';
     }).join('');
     var un = list.filter(function (p) { return !p.day; }).length;

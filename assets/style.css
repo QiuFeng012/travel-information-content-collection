@@ -24,6 +24,11 @@
   --topbar-h: 58px;
   --strip-h: 46px;
 
+  /* 地点标记的星形。内径比取 0.52（标准五角星是 0.382）——
+     标准星太瘦，肚子中央只有 5px 宽，塞不下站号；加胖后中心有 ~16px。 */
+  --star: polygon(50% 0%, 65.3% 29%, 97.5% 34.5%, 74.7% 58%, 79.4% 90.5%,
+                  50% 76%, 20.6% 90.5%, 25.3% 58%, 2.5% 34.5%, 34.7% 29%);
+
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
           "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
@@ -289,7 +294,7 @@ select.plain {
 
 .place {
   display: grid;
-  grid-template-columns: 26px 1fr;
+  grid-template-columns: 32px 1fr;
   gap: 10px;
   width: 100%;
   padding: 12px 16px 13px;
@@ -306,22 +311,9 @@ select.plain {
 
 .place[aria-current="true"] .pname { color: var(--accent); }
 
-.pin {
-  width: 26px; height: 26px;
-  margin-top: 2px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 700;
-  background: var(--surface-2);
-  color: var(--ink-2);
-  border: 1px solid var(--line);
-}
+/* 列表里的序号也用小一档的星，跟地图上是同一套视觉语言 */
 
-.pin.on { color: #fff; border-color: transparent; }
-
-.pin.todo { border-style: dashed; border-color: var(--accent); color: var(--accent); background: transparent; }
+.pin { margin-top: 1px; }
 
 .ptop {
   display: flex;
@@ -408,29 +400,66 @@ select.plain {
 
 .pop-acts { margin-top: 9px; display: flex; gap: 6px; }
 
-/* 自定义标记 */
+/* ---------- 地点标记：五角星 ----------
+   两层叠出来：外层 ::before 铺满做描边，内层 .star-fill 缩到 80% 做填充。
+   clip-path 会连 outline 一起裁掉，所以选中态只能靠放大 + 发光来做。 */
 
-.mk {
-  width: 26px; height: 26px;
-  border-radius: 50%;
+.star {
+  position: relative;
   display: grid;
   place-items: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  border: 2px solid rgba(255,255,255,.9);
-  box-shadow: 0 1px 4px rgba(0,0,0,.35);
-  cursor: pointer;
+  flex: none;
+  --mk-edge: var(--line);
+  --mk-body: var(--surface-2);
+  --mk-text: var(--ink-2);
+}
+
+.star::before,
+.star-fill {
+  content: '';
+  position: absolute;
+  inset: 0;
+  clip-path: var(--star);
+}
+
+.star::before { background: var(--mk-edge); }
+
+.star-fill {
+  transform: scale(.8);
+  background: var(--mk-body);
+}
+
+.star-label {
+  position: relative;
+  z-index: 1;
   font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -.02em;
+  color: var(--mk-text);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .2);
 }
 
-.mk.todo {
-  background: transparent !important;
-  border: 2px dashed var(--accent);
-  color: var(--accent);
+/* 已排进行程：实心星，填当天颜色 + 白描边 */
+.star.t-day  { --mk-edge: #fff;  --mk-body: var(--c);      --mk-text: #fff; }
+
+/* 未分组：空心星，白底深描边，跟实心星拉开层级 */
+.star.t-free { --mk-edge: var(--ink-2); --mk-body: var(--surface); --mk-text: var(--ink-2); }
+.star.t-free .star-label { font-size: 11px; }
+
+.mk {
+  cursor: pointer;
+  filter: drop-shadow(0 1.5px 2.5px rgba(0, 0, 0, .45));
+  transition: transform .12s ease;
 }
 
-.mk.sel { outline: 3px solid var(--accent); outline-offset: 2px; }
+.mk.sel {
+  transform: scale(1.25);
+  filter: drop-shadow(0 0 7px var(--accent)) drop-shadow(0 1.5px 2.5px rgba(0, 0, 0, .45));
+}
 
 /* 图例 */
 
@@ -456,9 +485,25 @@ select.plain {
   color: var(--ink-2);
 }
 
-.legend .sw { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+/* 图例色块跟地图标记同形，看到图例就知道地图上那个星是什么 */
 
-.legend .sw.hollow { background: transparent; border: 1.5px dashed var(--accent); }
+.legend .sw { width: 13px; height: 13px; position: relative; flex: none; }
+
+.legend .sw::before,
+.legend .sw::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  clip-path: var(--star);
+}
+
+.legend .sw::before { background: currentColor; }
+
+/* 空心星：中间挖一块底色出来，就成了一圈描边 */
+.legend .sw.hollow::after {
+  background: var(--surface);
+  transform: scale(.5);
+}
 
 .legend .n { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-left: auto; }
 
