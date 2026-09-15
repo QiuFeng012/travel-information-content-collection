@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>珠江新城 · 地点信息图</title>
+<meta name="description" content="广州珠江新城 CBD 的地点信息集合与行程规划工具。">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-view="list">
+
+<header class="topbar">
+  <div class="brand">
+    <b>珠江新城 · 地点信息图</b>
+    <span>Zhujiang New Town</span>
+  </div>
+
+  <label class="field search">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+      <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/>
+    </svg>
+    <input id="q" type="text" placeholder="搜名称 / 标签 / 备注…" autocomplete="off">
+  </label>
+
+  <div class="spacer"></div>
+
+  <select class="plain" id="basemap" title="底图">
+    <option value="gaode">高德 · 矢量</option>
+    <option value="gaode-sat">高德 · 卫星</option>
+    <option value="osm">OpenStreetMap</option>
+  </select>
+
+  <button class="btn" id="btnEdit" aria-pressed="false" title="开启后可以新增、修改、拖动地点">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="M14 5l4 4"/>
+    </svg>
+    编辑
+  </button>
+
+  <button class="btn" id="btnExport" title="导出数据或行程">导出</button>
+
+  <button class="btn mobile-toggle" id="btnView" title="切换列表 / 地图">地图</button>
+</header>
+
+<nav class="strip" id="strip"></nav>
+
+<main class="layout">
+  <section class="pane-list" id="paneList">
+    <div class="listhead">
+      <h2 id="listTitle">全部地点</h2>
+      <span class="count" id="listCount"></span>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <section class="pane-map" id="paneMap">
+    <div id="map"></div>
+    <div class="legend" id="legend"></div>
+    <div class="basemap-note" id="baseNote"></div>
+  </section>
+</main>
+
+<aside class="drawer" id="drawer" aria-hidden="true" hidden></aside>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="data/places.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+.preview/
+__probe.html
+__mkprobe.mjs
+node_modules/
+.DS_Store
