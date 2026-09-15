@@ -11,7 +11,7 @@
  * 改了需要立即生效的资源，记得把 VERSION 加一。
  * ============================================================ */
 
-var VERSION = 'v3';
+var VERSION = 'v4';
 var SHELL = 'gzmap-shell-' + VERSION;
 var RUNTIME = 'gzmap-runtime-' + VERSION;
 

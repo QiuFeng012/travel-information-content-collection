@@ -784,6 +784,167 @@ select.plain {
 
 .mini:disabled { opacity: .45; cursor: default; }
 
+/* ---------- 详情页的图片 ---------- */
+
+.shots { position: relative; margin: 12px 0 14px; }
+
+/* 横向轮播：每张占满抽屉宽度，滑动吸附，页码靠 JS 更新 */
+.shots-track {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  border-radius: 8px;
+}
+
+.shots-track::-webkit-scrollbar { display: none; }
+
+.shots-track img {
+  flex: none;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  scroll-snap-align: start;
+  background: var(--surface-2);
+  cursor: zoom-in;
+}
+
+.shots-count {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: #fff;
+  background: rgba(0, 0, 0, .55);
+  border-radius: 999px;
+  padding: 2px 8px;
+  pointer-events: none;
+}
+
+/* 编辑模式里的缩略图 + 选图按钮 */
+
+.shots-edit { display: grid; gap: 9px; }
+
+.shots-edit .k {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.shots-thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.shot {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.shot-del {
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .62);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+
+.shot-del:hover { background: var(--accent); }
+
+.shot-add {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.shot-add:hover { border-color: var(--accent); color: var(--accent); }
+
+.photourl { display: flex; gap: 6px; }
+
+.photourl input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  outline: none;
+  font-size: 12.5px;
+}
+
+.photourl input:focus { border-color: var(--accent); }
+
+.shots-edit .hint code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  background: var(--surface-2);
+  padding: 0 3px;
+  border-radius: 3px;
+}
+
+/* 点开看大图 */
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background: rgba(12, 11, 10, .93);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  cursor: zoom-out;
+}
+
+.lightbox[hidden] { display: none; }
+
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.lb-count {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: #fff;
+  background: rgba(0, 0, 0, .55);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
 /* ---------- 吐司 ---------- */
 
 .toast {

@@ -35,6 +35,7 @@ const daySeed = ctx.window.PLACE_DAY_SEED || {};
 const errors = [];
 const warnings = [];
 const seen = new Map();
+let localPhotos = 0;      // 指向仓库内文件的图片张数
 
 function distKm(a, b) {
   const R = 6371, rad = (d) => (d * Math.PI) / 180;
@@ -94,6 +95,31 @@ places.forEach((p, i) => {
 
 if (!SHAPES) warnings.push('没能从 assets/app.js 解析出 SHAPES，style.shape 的校验已跳过');
 
+// 图片：指向不存在的文件是最容易漏的一种坏法——页面不会报错，只是图空白
+const IMG_EXT = /\.(jpe?g|png|webp|gif|avif|svg)$/i;
+places.forEach((p, i) => {
+  if (p.photos == null) return;
+  const at = `#${i} ${p.id || '(无 id)'}`;
+  if (!Array.isArray(p.photos)) {
+    errors.push(`${at}: photos 必须是字符串数组`);
+    return;
+  }
+  p.photos.forEach((src, k) => {
+    if (typeof src !== 'string' || !src.trim()) {
+      errors.push(`${at}: photos[${k}] 必须是非空字符串`);
+      return;
+    }
+    if (/^data:/i.test(src)) {
+      localPhotos++;
+      warnings.push(`${at}: photos[${k}] 是编辑时从本机选的图（base64），导出会很大，且换设备就没了`);
+    } else if (!/^https?:\/\//i.test(src)) {
+      if (!IMG_EXT.test(src)) errors.push(`${at}: photos[${k}] 路径不像图片：${src}`);
+      else if (!fs.existsSync(src)) errors.push(`${at}: photos[${k}] 指向的文件不存在：${src}`);
+      else localPhotos++;
+    }
+  });
+});
+
 Object.keys(daySeed).forEach((id) => {
   if (!seen.has(id)) errors.push(`PLACE_DAY_SEED 引用了不存在的 id: ${id}`);
   else if (!DAYS.includes(daySeed[id])) errors.push(`PLACE_DAY_SEED["${id}"] 的 "${daySeed[id]}" 不是合法行程名`);
@@ -117,6 +143,10 @@ const styled = places.filter((p) => p.style && Object.keys(p.style).length);
 console.log(`自定义外观 ${styled.length} / ${places.length}`
   + (styled.length ? `（${styled.map((p) => p.name).join('、')}）` : '')
   + (SHAPES ? `   可选形状：${SHAPES.join(' / ')}` : ''));
+const withPhotos = places.filter((p) => Array.isArray(p.photos) && p.photos.length);
+const totalPhotos = withPhotos.reduce((n, p) => n + p.photos.length, 0);
+console.log(`带图片的地点 ${withPhotos.length} / ${places.length}，共 ${totalPhotos} 张`
+  + `（仓库内文件 ${localPhotos} 张）`);
 console.log(`分布跨度 lat ${Math.min(...lats).toFixed(4)}–${Math.max(...lats).toFixed(4)}`
   + `, lng ${Math.min(...lngs).toFixed(4)}–${Math.max(...lngs).toFixed(4)}`
   + `（对角约 ${spanKm.toFixed(1)} km）`);

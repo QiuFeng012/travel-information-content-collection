@@ -283,6 +283,7 @@
     }
   }
 
+  // 返回是否写成功——加图片时要靠它回滚，localStorage 只有几 MB
   function persist() {
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
@@ -291,8 +292,10 @@
         deleted: state.deleted,
         places: state.places
       }));
+      return true;
     } catch (e) {
-      toast('本地存储写入失败（可能是隐私模式）');
+      toast('本机存储写满了（localStorage 约 5 MB）。删掉几张图，或把图片放进 assets/photos/ 用路径引用。');
+      return false;
     }
   }
 
@@ -686,6 +689,121 @@
     renderAll();
   }
 
+  /* ---------------- 地点图片 ----------------
+   * p.photos 是字符串数组，每一项可以是：
+   *   相对路径   assets/photos/xxx.jpg   ← 推荐，进仓库、能离线
+   *   http(s) 链接
+   *   data: URL  编辑模式里从本机选图后压出来的，只存在浏览器里
+   * 三种在页面上没区别，但只有前两种能跟着 places.js 走。
+   */
+
+  function photosOf(p) {
+    return Array.isArray(p.photos) ? p.photos.filter(function (s) { return typeof s === 'string' && s; }) : [];
+  }
+
+  function isDataUrl(s) { return /^data:/i.test(s); }
+
+  // 本机选的图先压到最长边 1280、JPEG 0.7 再存，原图不动。
+  // 不压的话一张手机照片就有 4–5 MB，localStorage 直接爆掉。
+  function shrinkImage(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var scale = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+          var c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+          c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          resolve(c.toDataURL('image/jpeg', 0.7));
+        } catch (e) {
+          URL.revokeObjectURL(url);
+          reject(e);
+        }
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('这张图解不开'));
+      };
+      img.src = url;
+    });
+  }
+
+  function addPhoto(p, src) {
+    if (!src) return;
+    if (!p.photos) p.photos = [];
+    p.photos.push(src);
+    if (!persist()) {           // 存不下就回滚，别让界面和存储不一致
+      p.photos.pop();
+      if (!p.photos.length) delete p.photos;
+      return false;
+    }
+    renderDrawer();
+    return true;
+  }
+
+  function removePhoto(p, i) {
+    if (!p.photos) return;
+    p.photos.splice(i, 1);
+    if (!p.photos.length) delete p.photos;
+    persist();
+    renderDrawer();
+  }
+
+  // 详情页顶部的图片轮播。多张时横向滑动，右下角有页码。
+  function shotsView(p) {
+    var list = photosOf(p);
+    if (!list.length) return '';
+    var imgs = list.map(function (src, i) {
+      return '<img src="' + esc(src) + '" data-shot="' + i + '"'
+        + ' alt="' + esc(p.name) + ' 图片 ' + (i + 1) + '"'
+        + (i ? ' loading="lazy"' : '') + '>';
+    }).join('');
+    return '<div class="shots">'
+      + '<div class="shots-track" id="shotsTrack">' + imgs + '</div>'
+      + (list.length > 1
+        ? '<span class="shots-count" id="shotsCount">1 / ' + list.length + '</span>' : '')
+      + '</div>';
+  }
+
+  function shotsEdit(p) {
+    var list = photosOf(p);
+    var thumbs = list.map(function (src, i) {
+      return '<span class="shot"><img src="' + esc(src) + '" alt="">'
+        + '<button type="button" class="shot-del" data-del-shot="' + i + '" title="删除这张">×</button>'
+        + '</span>';
+    }).join('');
+    return '<div class="shots-edit">'
+      + '<span class="k">图片（' + list.length + '）</span>'
+      + '<div class="shots-thumbs">' + thumbs
+      + '<label class="shot-add" title="从本机选图">＋'
+      + '<input type="file" id="shotFile" accept="image/*" multiple hidden></label>'
+      + '</div>'
+      + '<div class="photourl">'
+      + '<input type="text" id="shotUrl" placeholder="或粘贴图片链接 / 路径，回车添加">'
+      + '<button type="button" class="mini" id="btnAddShotUrl">添加</button>'
+      + '</div>'
+      + '<div class="hint">本机选的图会先压到最长边 1280px 再存进浏览器，原图不动；'
+      + '但这类图<b>只活在当前浏览器里</b>。想长期保存、换设备也能看到，'
+      + '把图片放进 <code>assets/photos/</code>，这里改成 <code>assets/photos/文件名.jpg</code>。</div>'
+      + '</div>';
+  }
+
+  function openLightbox(list, i) {
+    var box = $('lightbox');
+    if (!box || !list.length) return;
+    box.innerHTML = '<img src="' + esc(list[i]) + '" alt="">'
+      + (list.length > 1 ? '<span class="lb-count">' + (i + 1) + ' / ' + list.length + '</span>' : '');
+    box.hidden = false;
+  }
+
+  function closeLightbox() {
+    var box = $('lightbox');
+    if (box) { box.hidden = true; box.innerHTML = ''; }
+  }
+
   function renderDrawer() {
     var d = $('drawer');
     var p = cur();
@@ -701,6 +819,7 @@
 
     if (state.drawerMode === 'edit') {
       body = '<div class="drawer-body"><div class="form">'
+        + shotsEdit(p)
         + fld('名称', '<input type="text" data-f="name" value="' + esc(p.name) + '">')
         + fld('英文名 / 别名', '<input type="text" data-f="en" value="' + esc(p.en) + '">')
         + '<div class="row3">'
@@ -757,7 +876,8 @@
       }).join(' ') || '—';
 
       body = '<div class="drawer-body">'
-        + '<dl class="kv" style="border-top:0">'
+        + shotsView(p)
+        + '<dl class="kv"' + (photosOf(p).length ? '' : ' style="border-top:0"') + '>'
         + kv('分类', esc(p.cat) + (p.booking ? ' · 需预约' : ''))
         + kv('行程', p.day
           ? '<span style="color:' + dayColor(p.day) + ';font-weight:600">' + esc(p.day) + '</span> · 第 ' + orderIndex(p) + ' 站'
@@ -784,6 +904,78 @@
     }
 
     d.innerHTML = head + body + foot;
+    wireDrawer(p);
+  }
+
+  // 每次 innerHTML 重建后要重新挂的东西（轮播页码、灯箱、选图、粘链接）
+  function wireDrawer(p) {
+    var d = $('drawer');
+    var list = photosOf(p);
+
+    var track = d.querySelector('#shotsTrack');
+    if (track) {
+      var count = d.querySelector('#shotsCount');
+      track.addEventListener('scroll', function () {
+        if (!count) return;
+        var step = track.clientWidth + 8;   // 8 = CSS 里的 gap
+        var n = Math.min(list.length, Math.round(track.scrollLeft / step) + 1);
+        count.textContent = n + ' / ' + list.length;
+      }, { passive: true });
+    }
+
+    d.querySelectorAll('[data-shot]').forEach(function (img) {
+      img.addEventListener('click', function () {
+        openLightbox(list, +img.getAttribute('data-shot'));
+      });
+    });
+
+    d.querySelectorAll('[data-del-shot]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        removePhoto(p, +btn.getAttribute('data-del-shot'));
+      });
+    });
+
+    var file = d.querySelector('#shotFile');
+    if (file) {
+      file.addEventListener('change', function () {
+        var files = Array.prototype.slice.call(file.files || []);
+        if (!files.length) return;
+        var done = 0, failed = 0;
+        var seq = files.reduce(function (chain, f) {
+          return chain.then(function () {
+            return shrinkImage(f).then(function (dataUrl) {
+              if (addPhoto(p, dataUrl)) done++; else failed++;
+            }, function () {
+              failed++;
+              toast('「' + f.name + '」解不开，可能是 HEIC。先转成 JPEG 再选。');
+            });
+          });
+        }, Promise.resolve());
+        seq.then(function () {
+          if (done) toast('加了 ' + done + ' 张图（只存在这台设备上）');
+          if (failed && !done) toast('这些图都没能加上');
+        });
+      });
+    }
+
+    var url = d.querySelector('#shotUrl');
+    var addUrl = function () {
+      var v = (url.value || '').trim();
+      if (!v) return;
+      if (!/^(https?:\/\/|data:)/i.test(v) && !/^[\w./-]+\.(jpe?g|png|webp|gif|avif)$/i.test(v)) {
+        toast('看起来不是图片链接或路径');
+        return;
+      }
+      if (addPhoto(p, v)) { url.value = ''; toast('已添加'); }
+    };
+    if (url) {
+      url.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); addUrl(); }
+      });
+    }
+    var btnAddUrl = d.querySelector('#btnAddShotUrl');
+    if (btnAddUrl) btnAddUrl.addEventListener('click', addUrl);
   }
 
   function kv(k, v) { return '<dt>' + esc(k) + '</dt><dd>' + v + '</dd>'; }
@@ -905,7 +1097,7 @@
   function exportPlacesJS() {
     var body = state.places.map(function (p) {
       var o = {};
-      ['id', 'name', 'en', 'cat', 'tags', 'lat', 'lng', 'v', 'stay', 'price', 'hours', 'best', 'booking', 'note', 'link', 'style']
+      ['id', 'name', 'en', 'cat', 'tags', 'lat', 'lng', 'v', 'stay', 'price', 'hours', 'best', 'booking', 'note', 'link', 'style', 'photos']
         .forEach(function (k) { o[k] = p[k]; });
       return '  ' + JSON.stringify(o, null, 2).split('\n').join('\n  ');
     }).join(',\n');
@@ -920,7 +1112,18 @@
       + 'window.PLACE_DAY_SEED = ' + JSON.stringify(days, null, 2) + ';\n';
 
     download('places.js', out, 'application/javascript;charset=utf-8');
-    toast('已下载 places.js，覆盖 data/places.js 即可固化');
+
+    // 本机选的图是 base64，混进 places.js 会让文件膨胀得很难看，先说清楚
+    var embedded = 0;
+    state.places.forEach(function (p) {
+      photosOf(p).forEach(function (s) { if (isDataUrl(s)) embedded++; });
+    });
+    if (embedded) {
+      toast('已下载，但里面有 ' + embedded + ' 张图是 base64 内嵌的，文件会很大；'
+        + '建议把图片放进 assets/photos/ 再改成路径');
+    } else {
+      toast('已下载 places.js，覆盖 data/places.js 即可固化');
+    }
   }
 
   function itineraryMarkdown() {
@@ -1109,11 +1312,16 @@
     liveForm();
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeDrawer();
+      if (e.key === 'Escape') {
+        // 大图盖在抽屉上面，Esc 先关最上层
+        if (!$('lightbox').hidden) closeLightbox(); else closeDrawer();
+      }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === 'e' || e.key === 'E') $('btnEdit').click();
       if (e.key === '/') { e.preventDefault(); $('q').focus(); }
     });
+
+    $('lightbox').addEventListener('click', closeLightbox);
 
     window.addEventListener('resize', function () { if (map) map.invalidateSize(); });
   }
