@@ -96,7 +96,7 @@ tools/serve.mjs         零依赖本地服务器
 | `lat` `lng` | number | **WGS-84** 十进制度，见下节 |
 | `v` | 0 \| 1 | 坐标可信度：`1` 已人工校准，`0` 是近似值 |
 | `stay` | number | 建议停留分钟数 |
-| `price` | number | 人均元，`0` 显示为「免费」 |
+| `price` | number \| null | 人均元。`0` = 免费，`null` = 还不知道（显示「—」）。**别用 `0` 表示未知**，那会显示成「免费」 |
 | `hours` | string | 营业时间 |
 | `best` | string | 最佳时段 |
 | `booking` | boolean | 是否需提前预约 / 订票 |

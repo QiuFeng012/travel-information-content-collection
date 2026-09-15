@@ -143,7 +143,9 @@
     return r ? h + ' 小时 ' + r + ' 分' : h + ' 小时';
   }
 
+  // price 为 null = 还不知道；0 = 免费；>0 = 人均。别把「不知道」显示成「免费」
   function fmtPrice(v) {
+    if (v === null || v === undefined || v === '') return '—';
     v = Number(v) || 0;
     return v > 0 ? '¥' + v : '免费';
   }
@@ -565,7 +567,7 @@
         + '<div class="row3">'
         + fld('分类', selectHtml('cat', CAT_KEYS, p.cat))
         + fld('停留（分钟）', '<input type="number" data-f="stay" min="0" step="15" value="' + (+p.stay || 0) + '">')
-        + fld('人均（元）', '<input type="number" data-f="price" min="0" step="10" value="' + (+p.price || 0) + '">')
+        + fld('人均（元，留空＝未知）', '<input type="number" data-f="price" min="0" step="10" value="' + (p.price == null ? '' : +p.price) + '">')
         + '</div>'
         + fld('标签（逗号分隔）', '<input type="text" data-f="tags" value="' + esc((p.tags || []).join(', ')) + '">')
         + '<div class="row3">'
@@ -647,7 +649,10 @@
     d.querySelectorAll('[data-f]').forEach(function (el) {
       var f = el.getAttribute('data-f');
       if (f === 'booking') p.booking = el.checked;
-      else if (f === 'stay' || f === 'price') p[f] = Number(el.value) || 0;
+      else if (f === 'price') {
+        // 留空 = 还不知道，存 null，不要被 Number('') 变成 0（0 会显示成「免费」）
+        p.price = el.value.trim() === '' ? null : (Number(el.value) || 0);
+      } else if (f === 'stay') p.stay = Number(el.value) || 0;
       else if (f === 'lat' || f === 'lng') p[f] = Number(el.value) || 0;
       else if (f === 'tags') {
         p.tags = el.value.split(/[,，]/).map(function (s) { return s.trim(); }).filter(Boolean);
