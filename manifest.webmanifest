@@ -1,7 +1,7 @@
 {
-  "name": "珠江新城 · 地点信息图",
-  "short_name": "珠新地图",
-  "description": "广州珠江新城 CBD 的地点信息集合与行程规划工具",
+  "name": "广州 · 地点信息图",
+  "short_name": "广州地图",
+  "description": "广州市区的地点信息集合与行程规划工具",
   "lang": "zh-CN",
   "dir": "ltr",
   "start_url": "./",

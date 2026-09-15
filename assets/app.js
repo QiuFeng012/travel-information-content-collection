@@ -390,6 +390,36 @@
       + '&name=' + encodeURIComponent(p.name) + '&src=zjxnt-map&coordinate=gaode&callnative=1';
   }
 
+  // 初始视野跟着数据走：地点铺到哪，首屏就框到哪。
+  //
+  // 两个坑：
+  //   1. padding 会从可用宽高里扣掉，56px 的 padding 正好吃掉一整级 zoom，
+  //      结果就是数据明明能塞满却还留一大圈白。24px 够用且不浪费。
+  //   2. 手机上地图是 display:none，容器没尺寸；就算在桌面上，flex + dvh
+  //      的布局也可能要等一帧才稳定。尺寸不对时算出来的中心是偏的，
+  //      所以先 invalidateSize 再框。
+  var didFit = false;
+
+  function fitToPlaces(force) {
+    if (!map || !state.places.length) return;
+    if (didFit && !force) return;
+    var size = map.getSize();
+    if (!size.x || !size.y) return;
+
+    var pts = state.places.map(toLatLng).filter(function (ll) {
+      return isFinite(ll[0]) && isFinite(ll[1]);
+    });
+    if (!pts.length) return;
+
+    if (pts.length === 1) {
+      map.setView(pts[0], 15);
+    } else {
+      map.invalidateSize();
+      map.fitBounds(L.latLngBounds(pts), { padding: [24, 24], maxZoom: 16 });
+    }
+    didFit = true;
+  }
+
   function initMap() {
     if (typeof L === 'undefined') {
       $('map').innerHTML = '<div class="empty" style="padding-top:120px">'
@@ -398,12 +428,17 @@
     }
     var c = toDisplay(23.1176, 113.3232);
     map = L.map('map', {
-      center: c, zoom: 15, minZoom: 12, maxZoom: 19,
+      center: c, zoom: 12, minZoom: 10, maxZoom: 19,
+      // zoomSnap: 0 让 fitBounds 用得上小数级。默认的整数吸附会把
+      // 算出来的 13.97 砍成 13，白白多出一圈留白。
+      zoomSnap: 0,
       zoomControl: true, attributionControl: false
     });
     markerLayer = L.layerGroup().addTo(map);
     lineLayer = L.layerGroup().addTo(map);
     applyBasemap();
+    // 等一帧再框：让 flex + dvh 的布局先落定，否则容器尺寸是旧的
+    requestAnimationFrame(function () { fitToPlaces(); });
 
     map.on('click', function (e) {
       // 只有在编辑面板打开时才允许点图取点，免得浏览状态下手滑改掉坐标
@@ -847,8 +882,15 @@
       var v = document.body.getAttribute('data-view') === 'map' ? 'list' : 'map';
       document.body.setAttribute('data-view', v);
       this.textContent = v === 'map' ? '列表' : '地图';
-      if (v === 'map' && map) setTimeout(function () { map.invalidateSize(); }, 60);
+      if (v === 'map' && map) {
+        setTimeout(function () {
+          map.invalidateSize();
+          fitToPlaces();   // 手机上首次显示地图时才拿得到容器尺寸
+        }, 60);
+      }
     });
+
+    $('btnFit').addEventListener('click', function () { fitToPlaces(true); });
 
     $('btnExport').addEventListener('click', function (e) {
       e.stopPropagation();
@@ -890,7 +932,7 @@
       if (window.innerWidth <= 860 && map) {
         document.body.setAttribute('data-view', 'map');
         $('btnView').textContent = '列表';
-        setTimeout(function () { map.invalidateSize(); }, 60);
+        setTimeout(function () { map.invalidateSize(); fitToPlaces(); }, 60);
       }
     });
 

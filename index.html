@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>珠江新城 · 地点信息图</title>
-<meta name="description" content="广州珠江新城 CBD 的地点信息集合与行程规划工具。">
+<title>广州 · 地点信息图</title>
+<meta name="description" content="广州市区的地点信息集合与行程规划工具。">
 
 <!-- 加到主屏幕后按独立应用运行 -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -14,7 +14,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="珠新地图">
+<meta name="apple-mobile-web-app-title" content="广州地图">
 
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
@@ -26,8 +26,8 @@
 
 <header class="topbar">
   <div class="brand">
-    <b>珠江新城 · 地点信息图</b>
-    <span>Zhujiang New Town</span>
+    <b>广州 · 地点信息图</b>
+    <span>Guangzhou</span>
   </div>
 
   <label class="field search">
@@ -71,6 +71,7 @@
   <section class="pane-map" id="paneMap">
     <div id="map"></div>
     <div class="legend" id="legend"></div>
+    <button class="maptool" id="btnFit" title="把视野拉回到覆盖全部地点">⤢ 全部地点</button>
     <div class="basemap-note" id="baseNote"></div>
   </section>
 </main>

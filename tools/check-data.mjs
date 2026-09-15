@@ -1,12 +1,18 @@
 /* 数据自检：node tools/check-data.mjs
- * 校验 data/places.js 的字段、坐标范围、分组是否合法。
+ *
+ * 站点范围是「广州市区」，所以这里不卡半径，只做两件事：
+ *   - 坐标落在广州行政边界之外 = 错误（几乎一定是 lat/lng 写反或打错）
+ *   - 离花城广场太远 = 警告（不是错，但值得回头确认一眼）
  * 往 data/places.js 里加完地点后跑一下，比在浏览器里肉眼找错快。
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const CENTER = { lat: 23.1176, lng: 113.3232 };   // 花城广场
-const RADIUS_KM = 3;
+const CENTER = { lat: 23.1176, lng: 113.3232 };   // 花城广场，只用于报距离
+// 广州市的大致行政范围（含从化、增城、南沙）
+const BOUNDS = { latMin: 22.50, latMax: 24.00, lngMin: 112.90, lngMax: 114.10 };
+const FAR_KM = 40;                                 // 超过这个距离基本是填错了
+
 const CATS = ['看', '吃', '喝', '逛', '公园', '交通'];
 const DAYS = ['Day1', 'Day2', 'Day3', 'Day4'];
 
@@ -41,12 +47,12 @@ places.forEach((p, i) => {
 
   if (typeof p.lat !== 'number' || typeof p.lng !== 'number') {
     errors.push(`${at}: lat/lng 必须是数字`);
+  } else if (p.lat < BOUNDS.latMin || p.lat > BOUNDS.latMax
+          || p.lng < BOUNDS.lngMin || p.lng > BOUNDS.lngMax) {
+    errors.push(`${at}: 坐标 ${p.lat},${p.lng} 落在广州行政范围之外，检查是否写反了 lat/lng`);
   } else {
     const d = distKm(CENTER, p);
-    if (d > RADIUS_KM) warnings.push(`${at}: 距花城广场 ${d.toFixed(2)} km，已超出 ${RADIUS_KM} km 范围`);
-    if (p.lat < 22 || p.lat > 24 || p.lng < 112 || p.lng > 115) {
-      errors.push(`${at}: 坐标 ${p.lat},${p.lng} 明显不在广州，检查是否写反了 lat/lng`);
-    }
+    if (d > FAR_KM) warnings.push(`${at}: 距花城广场 ${d.toFixed(1)} km，远得不太寻常，确认一下坐标`);
   }
 
   if (p.v !== 0 && p.v !== 1) warnings.push(`${at}: v 建议为 0 或 1，当前 ${p.v}`);
@@ -63,12 +69,21 @@ const by = (fn) => places.reduce((m, p) => (m[fn(p)] = (m[fn(p)] || 0) + 1, m), 
 const dist = (o) => Object.entries(o).sort((a, b) => b[1] - a[1])
   .map(([k, v]) => `${k || '(未分组)'} ${v}`).join(' · ');
 
+const lats = places.map((p) => p.lat), lngs = places.map((p) => p.lng);
+const spanKm = places.length > 1
+  ? distKm({ lat: Math.min(...lats), lng: Math.min(...lngs) },
+           { lat: Math.max(...lats), lng: Math.max(...lngs) })
+  : 0;
+
 console.log(`地点总数 ${places.length}`);
 console.log(`分类分布 ${dist(by((p) => p.cat))}`);
 console.log(`分组分布 ${dist(by((p) => (daySeed[p.id] || '')))}`);
 console.log(`待校准坐标 ${places.filter((p) => p.v !== 1).length} / ${places.length}`);
-console.log(`经纬度跨度 lat ${Math.min(...places.map(p => p.lat)).toFixed(4)}–${Math.max(...places.map(p => p.lat)).toFixed(4)}`
-  + `, lng ${Math.min(...places.map(p => p.lng)).toFixed(4)}–${Math.max(...places.map(p => p.lng)).toFixed(4)}`);
+console.log(`分布跨度 lat ${Math.min(...lats).toFixed(4)}–${Math.max(...lats).toFixed(4)}`
+  + `, lng ${Math.min(...lngs).toFixed(4)}–${Math.max(...lngs).toFixed(4)}`
+  + `（对角约 ${spanKm.toFixed(1)} km）`);
+const farthest = places.slice().sort((a, b) => distKm(CENTER, b) - distKm(CENTER, a))[0];
+if (farthest) console.log(`离花城广场最远 ${farthest.name} ${distKm(CENTER, farthest).toFixed(1)} km`);
 
 if (warnings.length) console.log('\n警告:\n' + warnings.map((w) => '  ! ' + w).join('\n'));
 if (errors.length) {

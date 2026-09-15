@@ -11,9 +11,9 @@
  * 改了需要立即生效的资源，记得把 VERSION 加一。
  * ============================================================ */
 
-var VERSION = 'v1';
-var SHELL = 'zjxnt-shell-' + VERSION;
-var RUNTIME = 'zjxnt-runtime-' + VERSION;
+var VERSION = 'v2';
+var SHELL = 'gzmap-shell-' + VERSION;
+var RUNTIME = 'gzmap-runtime-' + VERSION;
 
 // 预缓存清单：必须是真实存在的相对路径，缺一个 addAll 就会整体失败
 var PRECACHE = [
