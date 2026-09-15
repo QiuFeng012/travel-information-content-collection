@@ -26,8 +26,47 @@
 
   var DAY_VAR = { Day1: '--day1', Day2: '--day2', Day3: '--day3', Day4: '--day4' };
 
-  // 星形标记的边长（px）。嫌小/嫌挤就改这里，CSS 会跟着 JS 走。
+  // 标记的默认边长（px）。地点可以用 style.size 单独覆盖。
   var MK = { day: 36, free: 30, list: 32 };
+  var SIZE_MIN = 16, SIZE_MAX = 72;
+
+  // 可选形状。每个形状要知道四件事：
+  //   clip        —— clip-path 的值，形状本身
+  //   labelY      —— 文字中心线在框内的位置（图钉的"头"偏上）
+  //   fillScale   —— 内层填充缩到多少，留出来的就是描边宽度
+  //   anchorY     —— 哪个点对准地理坐标（图钉是底部的尖）
+  // 改这里的话 tools/check-data.mjs 会自动跟着读，不用同步改两份。
+  var SHAPES = {
+    star: {
+      name: '五角星', labelY: 50, fillScale: .8, anchorY: .46,
+      clip: 'polygon(50% 0%, 65.3% 29%, 97.5% 34.5%, 74.7% 58%, 79.4% 90.5%,'
+          + ' 50% 76%, 20.6% 90.5%, 25.3% 58%, 2.5% 34.5%, 34.7% 29%)'
+    },
+    pin: {
+      name: '图钉', labelY: 38, fillScale: .9, anchorY: 1,
+      clip: 'polygon(50% 100%, 19.97% 61.29%, 14.48% 51.49%, 12.08% 40.45%, 13.02% 29.26%,'
+          + ' 17.22% 18.77%, 24.28% 10.03%, 33.59% 3.72%, 44.38% 0.42%, 55.62% 0.42%,'
+          + ' 66.41% 3.72%, 75.72% 10.03%, 82.78% 18.77%, 86.98% 29.26%, 87.92% 40.45%,'
+          + ' 85.52% 51.49%, 80.03% 61.29%)'
+    },
+    circle: {
+      name: '圆', labelY: 50, fillScale: .82, anchorY: .5,
+      clip: 'circle(50% at 50% 50%)'
+    },
+    square: {
+      name: '圆角方', labelY: 50, fillScale: .84, anchorY: .5,
+      clip: 'inset(2% round 22%)'
+    },
+    diamond: {
+      name: '菱形', labelY: 50, fillScale: .78, anchorY: .5,
+      clip: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
+    },
+    hex: {
+      name: '六边形', labelY: 50, fillScale: .82, anchorY: .5,
+      clip: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)'
+    }
+  };
+  var SHAPE_KEYS = Object.keys(SHAPES);
 
   var BASEMAPS = {
     gaode: {
@@ -150,14 +189,61 @@
     return v > 0 ? '¥' + v : '免费';
   }
 
-  // 星形标记的唯一出口——地图、列表、图例都走这里，形状不会跑偏
-  function star(tier, size, color, label, extraClass) {
+  /* ---------------- 地点的外观（style 字段） ----------------
+   * p.style 是可选的，三个键各自独立，缺省就走默认：
+   *   shape  形状名，默认 star
+   *   color  #rrggbb，默认按分组取（在行程里 = 当天颜色，未分组 = 黑白空心）
+   *   size   地图上的边长 px，默认 MK.day / MK.free
+   * 颜色只改颜色，实心 / 空心仍然只表示「有没有排进行程」——
+   * 否则一改颜色就看不出哪些点还没规划了。
+   */
+
+  function styleOf(p) { return (p && p.style) || {}; }
+
+  function shapeKeyOf(p) {
+    var s = styleOf(p).shape;
+    return SHAPES[s] ? s : 'star';
+  }
+
+  function colorOf(p) {
+    var c = styleOf(p).color;
+    return (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) ? c : null;
+  }
+
+  // 没设就用分组默认色
+  function sizeOf(p) {
+    var raw = Number(styleOf(p).size);
+    var n = (isFinite(raw) && raw > 0) ? raw : (p.day ? MK.day : MK.free);
+    return Math.max(SIZE_MIN, Math.min(SIZE_MAX, n));
+  }
+
+  // 标记的唯一出口——地图、列表、图例都走这里，形状不会跑偏
+  function star(tier, size, color, label, extraClass, shapeKey) {
+    var sh = SHAPES[shapeKey] || SHAPES.star;
     var text = String(label == null ? '' : label);
-    var style = 'width:' + size + 'px;height:' + size + 'px' + (color ? ';--c:' + color : '');
-    // 某天超过 9 站时是两位数，得缩一档才塞得进星星肚子
+    var style = 'width:' + size + 'px;height:' + size + 'px'
+      + ';--clip:' + sh.clip
+      + ';--fill-scale:' + sh.fillScale
+      + ';--label-y:' + sh.labelY + '%'
+      + (color ? ';--c:' + color : '');
+    // 某天超过 9 站时是两位数，得缩一档才塞得进去
     var lstyle = text.length > 1 ? ' style="font-size:' + Math.round(size * 0.28) + 'px"' : '';
     return '<span class="star ' + tier + (extraClass ? ' ' + extraClass : '') + '" style="' + style + '">'
       + '<i class="star-fill"></i><b class="star-label"' + lstyle + '>' + esc(text) + '</b></span>';
+  }
+
+  // 一个地点该怎么画 —— 地图和列表共用，保证两处一致。
+  // 例外：列表里的尺寸固定，那是排版节奏，不该被地图上的大小带偏。
+  function lookOf(p, forList) {
+    var custom = colorOf(p);
+    var shape = shapeKeyOf(p);
+    return {
+      tier: p.day ? 't-day' : (custom ? 't-free t-tinted' : 't-free'),
+      shape: shape,
+      size: forList ? MK.list : sizeOf(p),
+      color: p.day ? (custom || dayColor(p.day)) : custom,
+      anchorY: (SHAPES[shape] || SHAPES.star).anchorY
+    };
   }
 
   function isGcj() { return BASEMAPS[state.basemap].crs === 'gcj'; }
@@ -331,6 +417,7 @@
 
     list.forEach(function (p) {
       var idx = orderIndex(p);
+      var look = lookOf(p, true);
       var label = idx ? String(idx) : (GLYPH[p.cat] || '·');
       var meta = p.cat + ' · ' + fmtStay(p.stay) + ' · ' + fmtPrice(p.price);
       var tags = (p.tags || []).slice(0, 4).map(function (t) {
@@ -338,7 +425,7 @@
       }).join('');
 
       html += '<button class="place" data-id="' + esc(p.id) + '" aria-current="' + (state.selectedId === p.id) + '">'
-        + star(p.day ? 't-day' : 't-free', MK.list, p.day ? dayColor(p.day) : null, label, 'pin')
+        + star(look.tier, look.size, look.color, label, 'pin', look.shape)
         + '<span>'
         + '<span class="ptop"><span class="pname">' + esc(p.name)
         + (p.v === 1 ? '' : '<span style="color:var(--muted);font-weight:400"> ≈</span>') + '</span>'
@@ -361,17 +448,24 @@
   function iconFor(p) {
     var idx = orderIndex(p);
     var label = idx ? String(idx) : (GLYPH[p.cat] || '·');
-    var tier = p.day ? 't-day' : 't-free';
-    var size = p.day ? MK.day : MK.free;
+    var look = lookOf(p, false);
     var cls = 'mk' + (state.selectedId === p.id ? ' sel' : '');
     return L.divIcon({
       className: '',
-      html: star(tier, size, p.day ? dayColor(p.day) : null, label, cls),
-      iconSize: [size, size],
-      // 星形重心比外接框中心略低一点，锚点往下挪一丁点，视觉上才落在坐标上
-      iconAnchor: [size / 2, size * 0.46],
-      popupAnchor: [0, -size * 0.42]
+      html: star(look.tier, look.size, look.color, label, cls, look.shape),
+      iconSize: [look.size, look.size],
+      // 锚点按形状给：五角星重心偏上一点，图钉则是底部的尖对准坐标
+      iconAnchor: [look.size / 2, look.size * look.anchorY],
+      popupAnchor: [0, -look.size * look.anchorY - 4]
     });
+  }
+
+  // 图标只有真的变了才 setIcon——Leaflet 的 setIcon 会换掉 DOM 元素，
+  // 而拖动处理器还绑在旧元素上，无脑重设会让"拖点校准"失效。
+  function iconSignature(p) {
+    var look = lookOf(p, false);
+    return [look.tier, look.shape, look.size, look.color || '',
+      orderIndex(p), state.selectedId === p.id ? 'sel' : ''].join('|');
   }
 
   function popupFor(p) {
@@ -499,11 +593,20 @@
           toast('坐标已校准：' + p.lat + ', ' + p.lng);
         });
         m.bindPopup(popupFor(p), { closeButton: true, maxWidth: 280 });
+        m._iconSig = iconSignature(p);
         markers[p.id] = m;
         markerLayer.addLayer(m);
       } else {
         m.setLatLng(ll);
-        m.setIcon(iconFor(p));
+        var sig = iconSignature(p);
+        if (m._iconSig !== sig) {
+          // setIcon 会换掉 DOM，拖动处理器还绑在旧元素上，得先摘再挂
+          var wasDragging = m.dragging.enabled();
+          if (wasDragging) m.dragging.disable();
+          m.setIcon(iconFor(p));
+          if (wasDragging) m.dragging.enable();
+          m._iconSig = sig;
+        }
         m.setPopupContent(popupFor(p));
         if (state.edit) m.dragging.enable(); else m.dragging.disable();
       }
@@ -588,6 +691,7 @@
     var p = cur();
     if (!p) { return; }
 
+    var look = lookOf(p, false);
     var head = '<div class="drawer-head"><div style="flex:1;min-width:0">'
       + '<h3>' + esc(p.name) + '</h3>'
       + (p.en ? '<div class="en">' + esc(p.en) + '</div>' : '')
@@ -619,6 +723,27 @@
         + fld('参考链接', '<input type="text" data-f="link" value="' + esc(p.link) + '">')
         + '<label class="check"><input type="checkbox" data-f="booking"' + (p.booking ? ' checked' : '') + '> 需要提前预约 / 订票</label>'
         + fld('坐标状态', '<input type="text" value="' + (p.v === 1 ? '已校准' : '近似值（±100–300 米）') + '" disabled>')
+        + '<div class="swatch">'
+        + '<span class="k">外观预览</span>'
+        + '<span class="swatch-preview">'
+        + star(look.tier, 44, look.color, orderIndex(p) ? String(orderIndex(p)) : (GLYPH[p.cat] || '·'), '', look.shape)
+        + '</span>'
+        + '<span class="swatch-note">' + esc(SHAPES[look.shape].name) + ' · ' + look.size + 'px'
+        + (colorOf(p) ? '' : ' · 颜色跟随分组') + '</span>'
+        + '</div>'
+        + '<div class="row3">'
+        + fld('形状', selectHtml('shape', [''].concat(SHAPE_KEYS), styleOf(p).shape || '',
+            '默认（五角星）',
+            ['默认（五角星）'].concat(SHAPE_KEYS.map(function (k) { return SHAPES[k].name; }))))
+        + fld('大小 px（留空＝默认）', '<input type="number" data-f="size" min="' + SIZE_MIN + '" max="' + SIZE_MAX
+            + '" step="2" placeholder="' + (p.day ? MK.day : MK.free) + '" value="'
+            + (styleOf(p).size == null ? '' : +styleOf(p).size) + '">')
+        + fld('颜色', '<span class="colorwrap"><input type="color" data-f="color" value="'
+            + esc(colorOf(p) || (p.day ? dayColor(p.day) : '#bf4a30')) + '">'
+            + '<button type="button" class="mini" id="btnColorDefault"'
+            + (colorOf(p) ? '' : ' disabled') + '>默认</button></span>')
+        + '</div>'
+        + '<div class="hint">颜色只改颜色，实心 / 空心仍然表示「有没有排进行程」——没分组的点自定义颜色后依然是空心。</div>'
         + '</div></div>';
 
       foot = '<div class="drawer-foot">'
@@ -667,10 +792,16 @@
     return '<label><span class="k">' + esc(label) + '</span>' + inner + '</label>';
   }
 
-  function selectHtml(field, options, value, placeholder) {
+  // labels 可选：值和显示名不一样时用（比如形状的 key 是 star，显示「五角星」）。
+  // 给 labels 就必须和 options 一一对应、长度一致——少一项就会整体错位。
+  function selectHtml(field, options, value, placeholder, labels) {
+    if (labels && labels.length !== options.length) {
+      throw new Error('selectHtml("' + field + '")：labels 有 ' + labels.length
+        + ' 项，options 有 ' + options.length + ' 项，必须一样长');
+    }
     var h = '<select data-f="' + field + '">';
-    options.forEach(function (o) {
-      var label = o === '' ? (placeholder || '（空）') : o;
+    options.forEach(function (o, i) {
+      var label = labels ? labels[i] : (o === '' ? (placeholder || '（空）') : o);
       h += '<option value="' + esc(o) + '"' + (String(value) === String(o) ? ' selected' : '') + '>'
         + esc(label) + '</option>';
     });
@@ -691,9 +822,27 @@
       else if (f === 'lat' || f === 'lng') p[f] = Number(el.value) || 0;
       else if (f === 'tags') {
         p.tags = el.value.split(/[,，]/).map(function (s) { return s.trim(); }).filter(Boolean);
+      } else if (f === 'shape' || f === 'color' || f === 'size') {
+        setStyle(p, f, el.value);
       } else p[f] = el.value;
     });
     persist();
+  }
+
+  // 写 style 字段：留空 / 非法就删掉这个键，而不是存个空值进去
+  function setStyle(p, key, raw) {
+    var s = p.style || (p.style = {});
+    if (key === 'shape') {
+      if (SHAPES[raw]) s.shape = raw; else delete s.shape;
+    } else if (key === 'color') {
+      if (/^#[0-9a-f]{6}$/i.test(raw)) s.color = raw.toLowerCase(); else delete s.color;
+    } else if (key === 'size') {
+      var n = Number(raw);
+      if (raw.trim() !== '' && isFinite(n) && n > 0) {
+        s.size = Math.round(Math.max(SIZE_MIN, Math.min(SIZE_MAX, n)));
+      } else delete s.size;
+    }
+    if (!Object.keys(s).length) delete p.style;   // 全默认就别留个空对象
   }
 
   function liveForm() {
@@ -756,7 +905,7 @@
   function exportPlacesJS() {
     var body = state.places.map(function (p) {
       var o = {};
-      ['id', 'name', 'en', 'cat', 'tags', 'lat', 'lng', 'v', 'stay', 'price', 'hours', 'best', 'booking', 'note', 'link']
+      ['id', 'name', 'en', 'cat', 'tags', 'lat', 'lng', 'v', 'stay', 'price', 'hours', 'best', 'booking', 'note', 'link', 'style']
         .forEach(function (k) { o[k] = p[k]; });
       return '  ' + JSON.stringify(o, null, 2).split('\n').join('\n  ');
     }).join(',\n');
@@ -942,6 +1091,11 @@
       if (id === 'btnEditThis') { state.drawerMode = 'edit'; renderDrawer(); renderMap(); }
       if (id === 'btnDone') { readForm(); state.drawerMode = 'view'; state.picking = null; renderAll(); toast('已保存'); }
       if (id === 'btnPick') { state.picking = state.selectedId; renderMap(); toast('现在在地图上点一下'); }
+      if (id === 'btnColorDefault') {
+        var p = cur();
+        if (p && p.style) { delete p.style.color; if (!Object.keys(p.style).length) delete p.style; }
+        persist(); renderAll();
+      }
       if (id === 'btnDelete') deletePlace(state.selectedId);
       if (id === 'btnPrev' || id === 'btnNext') {
         var list = visible();

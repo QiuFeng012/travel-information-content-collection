@@ -15,6 +15,15 @@ const FAR_KM = 40;                                 // 超过这个距离基本�
 
 const CATS = ['看', '吃', '喝', '逛', '公园', '交通'];
 const DAYS = ['Day1', 'Day2', 'Day3', 'Day4'];
+const SIZE_MIN = 16, SIZE_MAX = 72;
+
+// 形状清单直接从 assets/app.js 的 SHAPES 里读，避免两边各写一份然后走偏
+const SHAPES = (() => {
+  const src = fs.readFileSync('assets/app.js', 'utf8');
+  const block = src.match(/var\s+SHAPES\s*=\s*\{([\s\S]*?)\n\s{2}\};/);
+  if (!block) return null;
+  return [...block[1].matchAll(/^\s{4}([A-Za-z]\w*):\s*\{/gm)].map((m) => m[1]);
+})();
 
 const ctx = { window: {} };
 vm.createContext(ctx);
@@ -58,7 +67,32 @@ places.forEach((p, i) => {
   if (p.v !== 0 && p.v !== 1) warnings.push(`${at}: v 建议为 0 或 1，当前 ${p.v}`);
   if (p.stay != null && (typeof p.stay !== 'number' || p.stay < 0)) errors.push(`${at}: stay 非法`);
   if (p.price != null && (typeof p.price !== 'number' || p.price < 0)) errors.push(`${at}: price 非法`);
+
+  // style 是可选的，但写错了会静默退回默认值，所以要拦一下
+  if (p.style != null) {
+    if (typeof p.style !== 'object' || Array.isArray(p.style)) {
+      errors.push(`${at}: style 必须是对象，例如 { shape: 'pin', color: '#e0664a', size: 44 }`);
+    } else {
+      const s = p.style;
+      for (const k of Object.keys(s)) {
+        if (!['shape', 'color', 'size'].includes(k)) {
+          warnings.push(`${at}: style.${k} 不是已知的外观字段，会被忽略`);
+        }
+      }
+      if (s.shape != null && !(SHAPES || []).includes(s.shape)) {
+        errors.push(`${at}: style.shape "${s.shape}" 不合法（可选：${(SHAPES || ['?']).join(' / ')}）`);
+      }
+      if (s.color != null && !/^#[0-9a-f]{6}$/i.test(s.color)) {
+        errors.push(`${at}: style.color "${s.color}" 不是 #rrggbb 格式`);
+      }
+      if (s.size != null && (typeof s.size !== 'number' || s.size < SIZE_MIN || s.size > SIZE_MAX)) {
+        errors.push(`${at}: style.size 必须是 ${SIZE_MIN}–${SIZE_MAX} 的数字，当前 ${s.size}`);
+      }
+    }
+  }
 });
+
+if (!SHAPES) warnings.push('没能从 assets/app.js 解析出 SHAPES，style.shape 的校验已跳过');
 
 Object.keys(daySeed).forEach((id) => {
   if (!seen.has(id)) errors.push(`PLACE_DAY_SEED 引用了不存在的 id: ${id}`);
@@ -79,6 +113,10 @@ console.log(`地点总数 ${places.length}`);
 console.log(`分类分布 ${dist(by((p) => p.cat))}`);
 console.log(`分组分布 ${dist(by((p) => (daySeed[p.id] || '')))}`);
 console.log(`待校准坐标 ${places.filter((p) => p.v !== 1).length} / ${places.length}`);
+const styled = places.filter((p) => p.style && Object.keys(p.style).length);
+console.log(`自定义外观 ${styled.length} / ${places.length}`
+  + (styled.length ? `（${styled.map((p) => p.name).join('、')}）` : '')
+  + (SHAPES ? `   可选形状：${SHAPES.join(' / ')}` : ''));
 console.log(`分布跨度 lat ${Math.min(...lats).toFixed(4)}–${Math.max(...lats).toFixed(4)}`
   + `, lng ${Math.min(...lngs).toFixed(4)}–${Math.max(...lngs).toFixed(4)}`
   + `（对角约 ${spanKm.toFixed(1)} km）`);
