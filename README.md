@@ -2,7 +2,7 @@
 
 广州珠江新城 CBD 的**地点信息集合 + 行程规划**单页站点。给自己的旅游规划用，不是地图 App 的替代品——它解决的是「这一片哪几个点值得串成半天」这件事。
 
-纯静态，零依赖构建，双击 `index.html` 就能跑。
+纯静态，零依赖构建，双击 `index.html` 就能跑。**手机上可以加到主屏幕，当独立 App 用，断网也能打开。**
 
 ---
 
@@ -11,33 +11,50 @@
 | 方式 | 怎么做 | 适合 |
 |---|---|---|
 | 直接打开 | 双击 `index.html` | 快速看看、改数据 |
-| 本地服务器 | `npx serve .` 或 `python -m http.server` | 手机同局域网访问 |
-| 部署上线 | 把整个文件夹拖到 Netlify Drop / Cloudflare Pages | 手机随时能开 |
+| 本地服务器 | `node tools/serve.mjs` | 手机连同一 Wi-Fi 真机测试（会打印局域网地址） |
+| 部署上线 | 见下面「部署到手机上能打开的网址」 | 随时随地打开 |
 
-没有构建步骤，没有 `node_modules`，没有 API Key。**唯一的网络依赖是 CDN 上的 Leaflet 和地图瓦片**——断网时页面结构还在，地图会是灰的。
+没有构建步骤，没有 `node_modules`，没有 API Key。地图瓦片和 Leaflet 来自网络，但**首次打开后会被 Service Worker 缓存下来**——之后即使没信号，地点列表、详情、编辑全都能用，逛过的区域底图也还在。
 
-### 部署
+### 部署到手机上能打开的网址
+
+仓库里全部是相对路径，放在任何子目录下都能用。
+
+**方案一：GitHub Pages（零配置）**
+
+仓库 Settings → Pages → Source 选 `Deploy from a branch`，分支 `main`、目录 `/ (root)`，保存。一两分钟后：
 
 ```
-# GitHub Pages
-git init && git add -A && git commit -m "init"
-git remote add origin <你的仓库> && git push -u origin main
-# 仓库 Settings → Pages → Source 选 main / root
-
-# 或者最省事：把文件夹拖到 https://app.netlify.com/drop
+https://<你的用户名>.github.io/<仓库名>/
 ```
 
-全部是相对路径，放在任何子目录下都能用。
+`.nojekyll` 已经放好了，不需要额外设置。缺点是 `*.github.io` 在国内经常连不上或不稳定。
+
+**方案二：Cloudflare Pages（国内可达性通常更好）**
+
+[Cloudflare Dashboard](https://dash.cloudflare.com/) → Workers & Pages → Create → Pages →
+连接到这个 GitHub 仓库。构建设置全留空（Build command 空、Build output directory 填 `/`）。
+之后每次 `git push` 会自动重新部署。拿到的是 `<项目名>.pages.dev`。
+
+**手机怎么用**
+
+用手机浏览器打开上面任一地址，然后：
+
+- **iOS Safari**：分享 → 添加到主屏幕
+- **Android Chrome**：⋮ → 添加到主屏幕 / 安装应用
+
+之后从主屏幕图标进去就没有地址栏，跟原生 App 一样。底栏中间有「地图 / 列表」切换按钮。
 
 ---
 
 ## 界面怎么用
 
+- **手机上是单栏**：默认显示列表，点左上角「地图」按钮切到地图；在列表里点任意地点会自动切到地图并定位。
 - **左侧列表 / 右侧地图**双向联动，点任一边都会选中同一个地点。
-- **顶部筛选条**：行程分组（全部 / 未分组 / Day1–Day4）、类型（看 / 吃 / 喝 / 逛 / 公园 / 交通）、「≈ 待校准」。
+- **顶部筛选条**：行程分组（全部 / 未分组 / Day1–Day4）、类型（看 / 吃 / 喝 / 逛 / 公园 / 交通）、「≈ 待校准」。手机上这条可以左右滑动。
 - **行程连线**：同一天的地点会按数组顺序用该天颜色连成虚线，标号就是建议顺序。
 - **标记形状**：地图和列表都用五角星。**实心星**=已排进行程（颜色=当天，星里是第几站），**空心星**=还没分组（星里是分类字：景 / 食 / 饮 / 购 / 园 / 铁）。星的大小在 `assets/app.js` 顶部的 `MK` 里调。
-- **快捷键**：`/` 聚焦搜索，`E` 切换编辑模式，`Esc` 关掉抽屉。
+- **快捷键**（桌面）：`/` 聚焦搜索，`E` 切换编辑模式，`Esc` 关掉抽屉。
 - **在高德打开**：详情页的按钮会带着地点名跳到高德 App / 网页版，导航交给专业工具。
 - **导出**：下载 `places.js`（固化数据）、复制行程 Markdown、复制原始 JSON、恢复种子数据。
 
@@ -48,12 +65,20 @@ git remote add origin <你的仓库> && git push -u origin main
 ## 目录
 
 ```
-index.html          页面骨架
-assets/style.css    样式
-assets/app.js       全部逻辑（地图、筛选、编辑、导出）
-data/places.js      地点数据 ← 你主要改这个
-tools/check-data.mjs 数据自检脚本
+index.html              页面骨架
+manifest.webmanifest    PWA 清单（名字、图标、独立窗口）
+sw.js                   Service Worker，离线缓存
+assets/style.css        样式
+assets/app.js           全部逻辑（地图、筛选、编辑、导出）
+assets/icons/           图标（由 tools/make-icons.mjs 生成）
+data/places.js          地点数据 ← 你主要改这个
+tools/check-data.mjs    数据自检
+tools/check-pwa.mjs     PWA 自检（manifest / 图标 / 预缓存清单）
+tools/make-icons.mjs    重新生成图标
+tools/serve.mjs         零依赖本地服务器
 ```
+
+改了 `sw.js` 的预缓存清单后，记得把文件里的 `VERSION` 加一，否则已经打开过的浏览器会一直用旧缓存。
 
 ## 加 / 改地点
 
@@ -132,4 +157,16 @@ node tools/check-data.mjs
 
 - 数据存在 localStorage，换浏览器 / 清缓存会丢（导出 `places.js` 才是持久化的方式）
 - 高德的栅格瓦片地址没有走官方 API，个人自用没问题，要商用请换成高德官方 JS API + 自己的 Key
-- 没有离线缓存，地图瓦片依赖网络
+- 离线只能看到**你逛过的区域**的底图；没看过的地块在断网时是灰的（地点和列表不受影响）
+- 想改完网页立刻在手机上看到，得等 Service Worker 换版本：改完资源把 `sw.js` 里的 `VERSION` 加一
+- Service Worker 只在 https 或 localhost 下生效，`file://` 双击打开时没有离线能力
+
+## 自检
+
+```bash
+node tools/check-data.mjs   # 地点数据：id 重复、分类拼写、坐标越界、分组引用
+node tools/check-pwa.mjs    # manifest、图标尺寸、预缓存清单、SW 注册
+node tools/make-icons.mjs   # 改了图标配色后重新生成 assets/icons/
+```
+
+改完记得跑一遍；仓库约定见 `AGENTS.md`。

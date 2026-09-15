@@ -919,6 +919,12 @@
 
   /* ---------------- 启动 ---------------- */
 
+  // manifest 里的快捷方式走这里：./?view=map 直接落在手机上打开地图
+  if (/[?&]view=map/.test(location.search) && window.innerWidth <= 860) {
+    document.body.setAttribute('data-view', 'map');
+    $('btnView').textContent = '列表';
+  }
+
   load();
   $('basemap').value = state.basemap;
   bind();
@@ -927,5 +933,12 @@
 
   if (!state.places.length) {
     toast('没有地点数据，检查 data/places.js 是否加载');
+  }
+
+  // 离线缓存。file:// 打开时浏览器不允许注册 SW，直接跳过
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () { /* 注册失败不影响使用 */ });
+    });
   }
 })();

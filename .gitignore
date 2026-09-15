@@ -1,5 +1,8 @@
 .preview/
-__probe.html
-__mkprobe.mjs
 node_modules/
 .DS_Store
+Thumbs.db
+
+# 无头浏览器验证时生成的临时探针页，别提交
+__*.html
+__*.mjs

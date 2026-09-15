@@ -12,16 +12,31 @@
 第 2 条要求的「测试」，在本仓库目前由下面几个命令承担。改动数据或代码后，交付前至少跑完这几步：
 
 ```bash
-node --check assets/app.js     # 逻辑语法
-node --check data/places.js    # 数据语法
-node tools/check-data.mjs      # 数据结构自检：id 重复、分类拼写、坐标越界、分组引用
+node --check assets/app.js      # 逻辑语法
+node --check data/places.js     # 数据语法
+node --check sw.js              # service worker 语法
+node tools/check-data.mjs       # 数据结构自检：id 重复、分类拼写、坐标越界、分组引用
+node tools/check-pwa.mjs        # PWA 自检：manifest、图标尺寸、预缓存清单、SW 注册
 ```
 
-改了数据文件就必须跑 `check-data.mjs`；它是目前唯一会自动校验数据正确性的东西。
+- 改了 `data/places.js` 就必须跑 `check-data.mjs`，它是目前唯一会自动校验数据正确性的东西。
+- 改了图标、`manifest.webmanifest`、`sw.js`、或 `index.html` 的 head 部分，就必须跑 `check-pwa.mjs`。这类东西坏掉时页面照样能打开，只有「加到主屏幕」或离线时才出问题，最容易漏。
+- **改了预缓存清单后记得把 `sw.js` 里的 `VERSION` 加一**，否则老用户永远拿不到新版本。
 
-改了 UI 或交互（地图、抽屉、编辑表单）时，除了上面的命令，还要用无头浏览器实际渲染一次再交付。本站是纯静态站点，`file://` 直接打开就能验证，不需要起服务器：
+## 浏览器验证
+
+改了 UI 或交互时必须真实渲染一次再交付。纯静态站点，`file://` 直接打开就能验证大部分情况：
 
 ```bash
 msedge --headless=new --window-size=1500,940 --virtual-time-budget=9000 \
        --screenshot=out.png "file:///<仓库路径>/index.html"
 ```
+
+两个已经踩过的坑，别重复踩：
+
+1. **Service Worker 在 `file://` 下不会注册**，要验证 SW / 离线能力必须起 http：
+   `node tools/serve.mjs 8099` 然后访问 `http://127.0.0.1:8099/`。
+2. **Edge/Chrome 在 Windows 上有约 500px 的最小窗口宽度**。`--window-size=390,844` 不会给你
+   390px 的视口：页面按 504px 布局，截图却裁成 390px，看起来就像右侧溢出，实际并没有。
+   要真正的窄视口，把页面放进一个固定宽度的 `<iframe>` 里再截图。判断有没有溢出的可靠方法是
+   读 `document.documentElement.scrollWidth` 和 `clientWidth`，不是靠肉眼看截图。
